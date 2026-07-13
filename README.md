@@ -29,7 +29,7 @@ Der Server rendert pro Raum ein Bild (PNG oder BMP), der ESP32 lädt und zeigt e
 ## Funktionsübersicht
 
 - Lädt regelmäßig ein Bild (PNG oder BMP) vom Server und zeigt es auf dem E-Ink-Display
-- Aktiv nur Mo–Fr, 08:00–18:00 Uhr (Europe/Berlin, Sommerzeit automatisch)
+- Aktiv nur Mo–Fr, 07:55–17:00 Uhr (minutengenau konfigurierbar, Europe/Berlin, Sommerzeit automatisch)
 - Außerhalb der Betriebszeit: letztes Bild bleibt sichtbar, ESP32 schläft
 - **Drei Display-Versionen** unterstützt: V1, V2 und V3 (mit Rot-Kanal)
 - **Zwei Bildformate** umschaltbar: PNG (1-Bit/Graustufen) und BMP (1-Bit oder 4-Bit Palette)
@@ -80,8 +80,8 @@ Boot / Wake-Up
   ├─ WLAN verbinden  →  Fehler? → letztes Bild → Sleep
   ├─ OTA-Fenster 60s (nur bei Kaltstart)
   ├─ NTP synchronisieren
-  ├─ Zeitfenster prüfen (Mo–Fr 08–18)
-  │   └─ Inaktiv? → Sleep bis 08:00
+  ├─ Zeitfenster prüfen (Mo–Fr 07:55–17:00)
+  │   └─ Inaktiv? → Sleep bis 07:55
   ├─ Bild laden (ETag-Check)
   │   ├─ Neu  → Display aktualisieren
   │   ├─ 304  → kein Update
@@ -142,11 +142,17 @@ Auflösung und Treiber werden automatisch aus dieser Einstellung abgeleitet.
 ### Schritt 4 — Update-Intervall
 
 ```cpp
-#define UPDATE_INTERVAL_SEC  (15UL * 60UL)  // 15 Minuten
+#define UPDATE_INTERVAL_SEC  (20UL * 60UL)  // 20 Minuten (Standard)
 // Empfehlungen:
 //   Netzteil:  5UL * 60UL
-//   Akku:     15UL * 60UL
+//   Akku:     20UL * 60UL
 //   Akku:     30UL * 60UL
+```
+
+Aktivfenster minutengenau in `config.h`:
+```cpp
+#define ACTIVE_START_MIN  (7 * 60 + 55)   // 07:55 Uhr
+#define ACTIVE_END_MIN    (17 * 60 + 0)   // 17:00 Uhr (letzter Abgleich)
 ```
 
 ### Schritt 5 — Bildformat
@@ -208,7 +214,7 @@ Auflösung und Treiber werden automatisch aus dieser Einstellung abgeleitet.
 Nur beim Kaltstart (Reset oder Stromunterbrechung) — 60s-Fenster.
 
 **Intelligenter Sleep:**
-Außerhalb Mo–Fr 08–18 schläft das Gerät direkt bis zum nächsten Werktag 08:00.
+Außerhalb Mo–Fr 07:55–17:00 schläft das Gerät direkt bis zum nächsten Werktag 07:55.
 
 ### Dauerbetrieb — `DEEP_SLEEP_ENABLED 0` (Netzteil)
 

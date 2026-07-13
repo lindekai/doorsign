@@ -1,5 +1,30 @@
 # Changelog — DoorSign
 
+## Version 1.3 — Energie / Batterielaufzeit
+
+### Firmware-Optimierungen (Deep-Sleep-Pfad)
+- **WLAN-Schnellverbindung** — BSSID + Kanal des APs werden im RTC-RAM
+  gecacht; beim Aufwachen verbindet der ESP32 ohne AP-Scan (`WiFi.begin`
+  mit Kanal/BSSID). Fällt bei Fehlschlag sauber auf den normalen
+  Scan-Connect zurück. Spart ~2–3 s Funkzeit pro Wake
+  (`WifiManager`, `DeepSleepManager`, `DoorSign.ino`)
+- **NTP nur ~1×/Tag** — die ESP32-RTC hält die Zeit über den Deep Sleep;
+  NTP wird nur re-synchronisiert, wenn `NTP_RESYNC_INTERVAL_SEC` (24 h)
+  überschritten ist oder die Zeit ungültig ist. Spart ~1 s pro Wake
+  (`TimeManager::markSyncedIfValid`, `DoorSign.ino`)
+- **Update-Intervall auf 20 min** (`config.h`)
+- **Minutengenaues Aktivfenster** — `ACTIVE_START_MIN`/`ACTIVE_END_MIN`
+  statt voller Stunden; Standard **07:55–17:00** Mo–Fr (Schild ist um 08:00
+  aktuell, letzter Abgleich 17:00 → spart die 17–18-Uhr-Stunde)
+- **RTC-Prüfsumme** deckt jetzt alle RTC-Felder ab (nicht nur `bootCount`) —
+  korrupter Cache führt zu sicherem Fallback statt Fehlverhalten
+
+### Hinweis Hardware
+- Für echte µA-Deep-Sleep-Werte muss die Stromversorgung passen: LM2596
+  (~5 mA Ruhestrom) durch einen Low-Iq-Wandler ersetzen (z. B. TPS62827),
+  und die Always-on-Chips des Waveshare-Boards (CP2102/LDO/LED) entfernen.
+  Ohne diese Hardware-Änderung bleibt der Ruhestrom im mA-Bereich.
+
 ## Version 1.2 — Robustheit
 
 ### Behobene Fehler

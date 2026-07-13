@@ -55,6 +55,19 @@ bool TimeManager::isSynced() const {
     return _synced;
 }
 
+bool TimeManager::markSyncedIfValid() {
+    // Nach Deep Sleep ist das TimeManager-Objekt frisch (_synced=false), aber
+    // die ESP32-RTC hält die Zeit. Ist sie plausibel, gilt sie als synchron —
+    // so funktioniert isInActiveWindow() auch ohne erneuten NTP-Sync.
+    time_t now = time(nullptr);
+    if (now > 1704067200UL) {   // > 01.01.2024
+        _synced = true;
+        _lastSyncMillis = millis();
+        return true;
+    }
+    return false;
+}
+
 bool TimeManager::isInActiveWindow() const {
     if (!_synced) {
         logWarn("TIME", "isInActiveWindow: Zeit nicht synchronisiert");
@@ -70,8 +83,9 @@ bool TimeManager::isInActiveWindow() const {
         return false;
     }
 
-    // Stunde prüfen
-    if (ti.tm_hour < ACTIVE_HOUR_FROM || ti.tm_hour >= ACTIVE_HOUR_TO) {
+    // Uhrzeit minutengenau prüfen (Minuten seit Mitternacht)
+    int minutesOfDay = ti.tm_hour * 60 + ti.tm_min;
+    if (minutesOfDay < ACTIVE_START_MIN || minutesOfDay >= ACTIVE_END_MIN) {
         return false;
     }
 

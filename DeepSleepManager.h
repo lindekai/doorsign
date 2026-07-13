@@ -18,7 +18,11 @@
 // Struktur im RTC-RAM — überlebt Deep Sleep
 struct RtcData {
     uint32_t bootCount;       // Zählt jeden Wake-Up
-    uint32_t crc;             // Einfache Integritätsprüfung
+    uint32_t lastNtpSync;     // Unix-Zeit des letzten NTP-Syncs (0 = nie)
+    uint8_t  wifiBssid[6];    // BSSID des zuletzt verbundenen APs (Schnellverbindung)
+    uint8_t  wifiChannel;     // WLAN-Kanal des zuletzt verbundenen APs
+    bool     wifiValid;       // true = WLAN-Cache (BSSID/Kanal) gültig
+    uint32_t crc;             // Integritätsprüfung über alle Felder
 };
 
 class DeepSleepManager {
@@ -45,6 +49,21 @@ public:
 
     // Wakeup-Grund als lesbarer String
     String getWakeupReason() const;
+
+    // --- WLAN-Schnellverbindung (Cache im RTC-RAM) ---
+    // true wenn ein gültiger BSSID/Kanal-Cache vorliegt
+    bool hasWifiCache() const;
+    uint8_t getWifiChannel() const;
+    const uint8_t* getWifiBssid() const;
+    // BSSID + Kanal des verbundenen APs merken (nach erfolgreichem Connect)
+    void storeWifiCache(uint8_t channel, const uint8_t* bssid);
+    // Cache verwerfen (z.B. wenn Schnellverbindung fehlschlug)
+    void clearWifiCache();
+
+    // --- NTP-Sync-Zeitstempel (Cache im RTC-RAM) ---
+    // Unix-Zeit des letzten erfolgreichen NTP-Syncs (0 = nie)
+    uint32_t getLastNtpSync() const;
+    void     setLastNtpSync(uint32_t epoch);
 
 private:
     RtcData   _rtcData;

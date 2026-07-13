@@ -53,6 +53,33 @@ bool WifiManager::connect(unsigned long timeoutMs) {
     return false;
 }
 
+bool WifiManager::connectFast(unsigned long timeoutMs, uint8_t channel, const uint8_t* bssid) {
+    if (WiFi.isConnected()) return true;
+    if (!bssid || channel == 0) return false;
+
+    logInfo("WIFI", "Schnellverbindung (Kanal " + String(channel) + ", BSSID bekannt)...");
+
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(false);
+    // BSSID + Kanal vorgeben → kein AP-Scan nötig, deutlich schneller.
+    WiFi.begin(_ssid, _password, (int32_t)channel, bssid);
+
+    unsigned long startMs = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startMs < timeoutMs) {
+        delay(100);
+    }
+
+    if (WiFi.isConnected()) {
+        logInfo("WIFI", "Schnellverbindung OK — IP: " + getIPAddress() +
+                        ", " + String(getRSSI()) + " dBm");
+        return true;
+    }
+
+    logWarn("WIFI", "Schnellverbindung fehlgeschlagen — Fallback auf Scan-Verbindung");
+    return false;
+}
+
 bool WifiManager::isConnected() const {
     return WiFi.isConnected();
 }
