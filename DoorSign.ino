@@ -1,6 +1,6 @@
 // ============================================================
 //  DoorSign.ino — Digitales Türschild für Konferenzräume V.1.1
-//  https://github.com/lindekai/Doorsign/
+//  https://github.com/lindekai/DoorSign/
 //
 //  Betriebsmodi (config.h: DEEP_SLEEP_ENABLED):
 //

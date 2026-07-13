@@ -40,6 +40,11 @@
 // ============================================================
 #define UPDATE_INTERVAL_SEC  (15UL * 60UL)   // 15 Minuten
 
+// Blind-Schlafintervall im Deep-Sleep, wenn KEINE gueltige Zeit vorliegt
+// (NTP fehlgeschlagen). Verhindert, dass das Akku-Geraet bei anhaltendem
+// NTP-Ausfall alle UPDATE_INTERVAL_SEC aufwacht und funkt → Batterie-Schutz.
+#define NTP_FAIL_SLEEP_SEC   (30UL * 60UL)   // 30 Minuten
+
 // ============================================================
 //  ZEITKONFIGURATION
 // ============================================================
@@ -108,6 +113,11 @@
 #define DISPLAY_V3  3
 #define DISPLAY_TYPE  DISPLAY_V1   // ← Display-Version hier eintragen
 
+// Fehlkonfiguration zur Compile-Zeit abfangen:
+#if DISPLAY_TYPE != DISPLAY_V1 && DISPLAY_TYPE != DISPLAY_V2 && DISPLAY_TYPE != DISPLAY_V3
+  #error "DISPLAY_TYPE muss DISPLAY_V1, DISPLAY_V2 oder DISPLAY_V3 sein"
+#endif
+
 // Aufloesung wird automatisch aus DISPLAY_TYPE abgeleitet:
 #if DISPLAY_TYPE == DISPLAY_V1
   #define IMG_WIDTH   640
@@ -124,6 +134,10 @@
 // Bildformat wählen — nur EINEN Wert auf 1 setzen:
 #define IMAGE_FORMAT_PNG  1   // PNG: kleinere Dateien, Dekodierung auf ESP32
 #define IMAGE_FORMAT_BMP  0   // BMP: 1-Bit monochrom, keine Dekodierung nötig
+// Genau EIN Format muss aktiv sein — sonst Compile-Fehler:
+#if (IMAGE_FORMAT_PNG + IMAGE_FORMAT_BMP) != 1
+  #error "Genau EIN Bildformat aktivieren: IMAGE_FORMAT_PNG oder IMAGE_FORMAT_BMP = 1, das andere = 0"
+#endif
 //
 // Vergleich bei 640×384:
 //   PNG: ~4–30 KB,  Download schnell, Dekodierung ~100ms
