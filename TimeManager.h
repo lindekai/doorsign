@@ -20,7 +20,13 @@ public:
     // true wenn die Zeit mindestens einmal erfolgreich synchronisiert wurde
     bool isSynced() const;
 
-    // true wenn jetzt Montag–Freitag, 08:00–17:59 Uhr (Europe/Berlin)
+    // Übernimmt eine bereits gültige Systemzeit (aus der RTC, die den Deep
+    // Sleep überlebt), ohne neuen NTP-Sync. Setzt intern _synced, wenn die
+    // Uhr plausibel ist. Gibt true zurück, wenn die Zeit gültig ist.
+    bool markSyncedIfValid();
+
+    // true wenn jetzt Montag–Freitag innerhalb des aktiven Zeitfensters
+    // (ACTIVE_START_MIN..ACTIVE_END_MIN, Europe/Berlin)
     bool isInActiveWindow() const;
 
     // Aktuelle lokale Zeit als "HH:MM:SS"

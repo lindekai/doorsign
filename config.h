@@ -38,7 +38,7 @@
 //    Akku:     15 Minuten  → 15UL * 60UL
 //    Akku:     30 Minuten  → 30UL * 60UL
 // ============================================================
-#define UPDATE_INTERVAL_SEC  (15UL * 60UL)   // 15 Minuten
+#define UPDATE_INTERVAL_SEC  (20UL * 60UL)   // 20 Minuten
 
 // Blind-Schlafintervall im Deep-Sleep, wenn KEINE gueltige Zeit vorliegt
 // (NTP fehlgeschlagen). Verhindert, dass das Akku-Geraet bei anhaltendem
@@ -55,13 +55,23 @@
 // Aktive Tage: 1=Mo, 2=Di, 3=Mi, 4=Do, 5=Fr, 6=Sa, 0=So
 #define ACTIVE_WEEKDAY_FROM   1    // Montag
 #define ACTIVE_WEEKDAY_TO     5    // Freitag
-#define ACTIVE_HOUR_FROM      8    // 08:00 Uhr (inklusiv)
-#define ACTIVE_HOUR_TO       18    // 18:00 Uhr (exklusiv)
+// Aktive Uhrzeit — minutengenau, als Minuten seit Mitternacht.
+// Start etwas vor 08:00, damit das Schild um 08:00 aktuell ist;
+// Ende 17:00 = letzter Abgleich (spart die 17-18-Uhr-Stunde, ~5h/Woche).
+#define ACTIVE_START_MIN     (7 * 60 + 55)   // 07:55 Uhr (inklusiv)
+#define ACTIVE_END_MIN       (17 * 60 + 0)   // 17:00 Uhr (exklusiv)
 
 // ============================================================
 //  TIMEOUTS
 // ============================================================
 #define WIFI_CONNECT_TIMEOUT_MS    (20UL * 1000UL)
+// Kürzeres Timeout für die WLAN-Schnellverbindung (BSSID/Kanal aus RTC-Cache).
+// Schlägt sie in dieser Zeit fehl (AP-Reboot/Kanalwechsel), wird auf den
+// normalen Scan-Connect zurückgefallen.
+#define WIFI_FASTCONNECT_TIMEOUT_MS (8UL * 1000UL)
+// NTP nur höchstens einmal pro diesem Intervall neu synchronisieren;
+// dazwischen hält die ESP32-RTC die Zeit über den Deep Sleep. Spart Funkzeit.
+#define NTP_RESYNC_INTERVAL_SEC    (24UL * 60UL * 60UL)   // 24 Stunden
 #define WIFI_RECONNECT_INTERVAL_MS (30UL * 1000UL)
 #define NTP_SYNC_TIMEOUT_MS        (15UL * 1000UL)
 #define NTP_RETRY_INTERVAL_MS      (60UL * 1000UL)

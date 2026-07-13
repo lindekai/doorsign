@@ -167,9 +167,13 @@ void StateMachine::handleIdle() {
         } else {
             // Außerhalb des Zeitfensters: Zeitpunkt merken, damit sofort
             // nach Fensterbeginn ein Update erfolgt.
-            logInfo("SM", "Update fällig, aber außerhalb Zeitfenster " +
-                          String(ACTIVE_HOUR_FROM) + ":00–" +
-                          String(ACTIVE_HOUR_TO) + ":00 Mo–Fr — warte");
+            logInfo("SM", "Update fällig, aber außerhalb Zeitfenster (" +
+                          String(ACTIVE_START_MIN / 60) + ":" +
+                          (ACTIVE_START_MIN % 60 < 10 ? "0" : "") + String(ACTIVE_START_MIN % 60) +
+                          "–" +
+                          String(ACTIVE_END_MIN / 60) + ":" +
+                          (ACTIVE_END_MIN % 60 < 10 ? "0" : "") + String(ACTIVE_END_MIN % 60) +
+                          " Mo–Fr) — warte");
             // _lastUpdateMs NICHT aktualisieren: sofort updaten wenn Fenster öffnet
         }
     }

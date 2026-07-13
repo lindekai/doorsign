@@ -96,8 +96,19 @@ void setup() {
         displayManager.showStartup("Verbinde mit WLAN: " + String(WIFI_SSID));
     }
 
-    // WLAN verbinden
-    if (!wifiManager.connect(WIFI_CONNECT_TIMEOUT_MS)) {
+    // WLAN verbinden — erst Schnellverbindung via RTC-Cache (BSSID/Kanal),
+    // die den AP-Scan überspringt; bei Fehlschlag normaler Scan-Connect.
+    bool wifiConnected = false;
+    if (sleepManager.hasWifiCache()) {
+        wifiConnected = wifiManager.connectFast(WIFI_FASTCONNECT_TIMEOUT_MS,
+                                                sleepManager.getWifiChannel(),
+                                                sleepManager.getWifiBssid());
+        if (!wifiConnected) sleepManager.clearWifiCache();
+    }
+    if (!wifiConnected) {
+        wifiConnected = wifiManager.connect(WIFI_CONNECT_TIMEOUT_MS);
+    }
+    if (!wifiConnected) {
         logError("MAIN", "WLAN fehlgeschlagen — zeige letztes Bild und schlafe");
         if (imageManager.hasStoredImage()) {
             displayManager.showImageFromFile(FS_IMAGE_PATH);
@@ -106,6 +117,8 @@ void setup() {
         sleepManager.sleepUntilNextUpdate();
         return; // Wird nie erreicht
     }
+    // BSSID + Kanal für die nächste Schnellverbindung merken
+    sleepManager.storeWifiCache((uint8_t)WiFi.channel(), WiFi.BSSID());
 
 #if OTA_ENABLED
     // OTA-Fenster: 60 Sekunden nach dem Boot für OTA-Updates
@@ -123,8 +136,21 @@ void setup() {
     }
 #endif
 
-    // NTP synchronisieren
-    timeManager.synchronize();
+    // NTP nur bei Bedarf synchronisieren — sonst hält die ESP32-RTC die Zeit
+    // über den Deep Sleep und wir sparen Funkzeit pro Wake.
+    timeManager.markSyncedIfValid();   // gültige RTC-Zeit übernehmen
+    uint32_t lastSync  = sleepManager.getLastNtpSync();
+    time_t   nowEpoch  = time(nullptr);
+    bool     timeValid = (nowEpoch > 1704067200UL);
+    bool     needSync  = !timeValid || lastSync == 0 ||
+                         ((uint32_t)nowEpoch - lastSync) >= NTP_RESYNC_INTERVAL_SEC;
+    if (needSync) {
+        if (timeManager.synchronize()) {
+            sleepManager.setLastNtpSync((uint32_t)time(nullptr));
+        }
+    } else {
+        logInfo("MAIN", "Zeit aus RTC uebernommen — NTP-Sync uebersprungen");
+    }
 
     // Zeitfenster prüfen
     if (timeManager.isSynced() && !timeManager.isInActiveWindow()) {

@@ -14,6 +14,12 @@ public:
     // Gibt true zurück bei erfolgreicher Verbindung.
     bool connect(unsigned long timeoutMs = WIFI_CONNECT_TIMEOUT_MS);
 
+    // Schnellverbindung mit bekanntem BSSID + Kanal (aus RTC-Cache).
+    // Überspringt den AP-Scan → deutlich schnellerer Connect nach Deep Sleep.
+    // Gibt true zurück bei Erfolg; bei Fehlschlag sollte der Aufrufer den
+    // Cache verwerfen und connect() (normaler Scan) als Fallback nutzen.
+    bool connectFast(unsigned long timeoutMs, uint8_t channel, const uint8_t* bssid);
+
     // true wenn aktuell verbunden
     bool isConnected() const;
 
