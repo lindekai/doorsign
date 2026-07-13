@@ -1,5 +1,27 @@
 # Changelog — DoorSign
 
+## Version 1.2 — Robustheit
+
+### Behobene Fehler
+- **Akku-Schutz bei NTP-Ausfall** — ohne gültige Zeit schläft das Gerät jetzt
+  `NTP_FAIL_SLEEP_SEC` (30 min) statt `UPDATE_INTERVAL_SEC`. Verhindert häufiges
+  Aufwachen und Batterie-Entleerung bei anhaltendem NTP-Ausfall
+  (`DeepSleepManager.cpp`, `config.h`)
+- **Abgeschnittene Downloads werden erkannt** — Download-Schleife leert den
+  Empfangspuffer nach Verbindungsende, `write()`-Rückgabe wird geprüft, und die
+  geschriebene Bytezahl wird gegen `Content-Length` verifiziert. Verhindert, dass
+  ein unvollständiges Bild das letzte gute überschreibt (`ImageManager.cpp`)
+- **Stärkere PNG-Validierung** — `validatePng()` prüft nun IHDR-Dimensionen und
+  den IEND-Chunk am Dateiende (definitiver Trunkierungs-Detektor), nicht nur die
+  Signatur (`ImageManager.cpp`)
+- **Wirklich atomarer Bild-Austausch** — `rename` wird zuerst versucht, sodass ein
+  fehlgeschlagener Tausch das letzte gute Bild nicht mehr vernichten kann
+  (`ImageManager.cpp`)
+
+### Härtung
+- **Compile-Guards** in `config.h`: ungültiger `DISPLAY_TYPE` oder eine falsche
+  Bildformat-Wahl (keins/beide aktiv) bricht jetzt sichtbar zur Compile-Zeit ab
+
 ## Version 1.1 (Final)
 
 ### Neue Features

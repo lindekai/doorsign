@@ -90,12 +90,28 @@ DownloadResult ImageManager::downloadImage(const char* url) {
     size_t        written = 0;
     unsigned long dlStart = millis();
 
-    while (http.connected()) {
+    // Bedingung enthaelt bewusst auch stream->available(): wenn der Server die
+    // Verbindung schliesst, koennen im Empfangspuffer noch Bytes liegen — diese
+    // muessen geleert werden, sonst wird das Bild abgeschnitten (chunked / EOF).
+    while (http.connected() || stream->available() > 0) {
         size_t avail = stream->available();
         if (avail > 0) {
             size_t toRead = min(avail, sizeof(buf));
             int n = stream->readBytes(buf, toRead);
-            if (n > 0) { tmpFile.write(buf, n); written += n; }
+            if (n > 0) {
+                // Rueckgabe von write() pruefen: bei vollem LittleFS wird weniger
+                // geschrieben als angefordert → Datei waere unvollstaendig.
+                size_t w = tmpFile.write(buf, n);
+                if (w != (size_t)n) {
+                    logError("IMG", "Schreibfehler (" + String(w) + "/" +
+                                    String(n) + " Bytes) — LittleFS voll?");
+                    tmpFile.close();
+                    LittleFS.remove(FS_IMAGE_TMP);
+                    http.end();
+                    return DownloadResult::ERROR_STORAGE;
+                }
+                written += n;
+            }
         } else {
             if (contentLen > 0 && written >= (size_t)contentLen) break;
             delay(1);
@@ -120,18 +136,33 @@ DownloadResult ImageManager::downloadImage(const char* url) {
     http.end();
     logInfo("IMG", "Download: " + String(written) + " Bytes");
 
+    // Vollstaendigkeit pruefen: bei bekannter Content-Length muss die
+    // geschriebene Bytezahl exakt passen — sonst wurde der Download
+    // abgeschnitten (Verbindungsabbruch mitten im Stream).
+    if (contentLen > 0 && written != (size_t)contentLen) {
+        logError("IMG", "Unvollstaendig: " + String(written) + "/" +
+                        String(contentLen) + " Bytes");
+        LittleFS.remove(FS_IMAGE_TMP);
+        return DownloadResult::ERROR_HTTP;
+    }
+
     // Validierung
     if (!validateImage(FS_IMAGE_TMP)) {
         LittleFS.remove(FS_IMAGE_TMP);
         return DownloadResult::ERROR_INVALID_IMAGE;
     }
 
-    // Atomarer Austausch
-    LittleFS.remove(FS_IMAGE_PATH);
+    // Atomarer Austausch: rename ZUERST versuchen. LittleFS ueberschreibt ein
+    // bestehendes Ziel — das alte gute Bild bleibt so bis zum Erfolg intakt.
+    // Nur falls rename ueber ein existierendes Ziel scheitert, gezielt
+    // remove+retry als Fallback (Fenster ohne Bild bleibt dann minimal).
     if (!LittleFS.rename(FS_IMAGE_TMP, FS_IMAGE_PATH)) {
-        logError("IMG", "Rename fehlgeschlagen");
-        LittleFS.remove(FS_IMAGE_TMP);
-        return DownloadResult::ERROR_STORAGE;
+        LittleFS.remove(FS_IMAGE_PATH);
+        if (!LittleFS.rename(FS_IMAGE_TMP, FS_IMAGE_PATH)) {
+            logError("IMG", "Rename fehlgeschlagen");
+            LittleFS.remove(FS_IMAGE_TMP);
+            return DownloadResult::ERROR_STORAGE;
+        }
     }
 
     // Metadaten speichern
@@ -176,23 +207,68 @@ bool ImageManager::validatePng(const char* path) const {
     if (!f) { logError("IMG", "validatePng: nicht oeffenbar"); return false; }
 
     size_t size = f.size();
-    if (size < 8) {
+    // Minimum: 8 Byte Signatur + IHDR (Laenge/Typ/Daten bis Offset 24).
+    if (size < 24) {
         logError("IMG", "validatePng: zu klein (" + String(size) + " Bytes)");
         f.close(); return false;
     }
 
-    uint8_t sig[8];
-    f.read(sig, 8);
-    f.close();
+    // Kopf lesen: Signatur (0..7) + IHDR mit Breite/Hoehe (16..23, big-endian).
+    uint8_t hdr[24];
+    if (f.read(hdr, 24) != 24) {
+        logError("IMG", "validatePng: Lesefehler Kopf");
+        f.close(); return false;
+    }
 
     const uint8_t pngSig[8] = {0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A};
     for (int i = 0; i < 8; i++) {
-        if (sig[i] != pngSig[i]) {
+        if (hdr[i] != pngSig[i]) {
             logError("IMG", "validatePng: keine PNG-Signatur");
-            return false;
+            f.close(); return false;
         }
     }
-    logInfo("IMG", "validatePng: OK — " + String(size) + " Bytes");
+
+    // Breite/Hoehe aus IHDR (PNG speichert big-endian) gegen erwartete Maße pruefen.
+    uint32_t w = ((uint32_t)hdr[16] << 24) | ((uint32_t)hdr[17] << 16) |
+                 ((uint32_t)hdr[18] <<  8) |  (uint32_t)hdr[19];
+    uint32_t h = ((uint32_t)hdr[20] << 24) | ((uint32_t)hdr[21] << 16) |
+                 ((uint32_t)hdr[22] <<  8) |  (uint32_t)hdr[23];
+    if (w != (uint32_t)IMG_WIDTH || h != (uint32_t)IMG_HEIGHT) {
+        logError("IMG", "validatePng: Dimensionen " + String(w) + "x" + String(h) +
+                        " (erwartet " + String(IMG_WIDTH) + "x" + String(IMG_HEIGHT) + ")");
+        f.close(); return false;
+    }
+
+    // IEND-Chunk am Dateiende pruefen — erkennt abgeschnittene Downloads
+    // (chunked / Verbindungsabbruch), die die Signatur allein nicht aufdeckt.
+    // Es wird im Endbereich GESUCHT (nicht exakt das letzte Byte verlangt),
+    // damit wenige harmlose Zusatzbytes hinter IEND (z.B. ein angehaengter
+    // Zeilenumbruch durch eine Zustellkette) ein gueltiges Bild nicht ablehnen.
+    // Ein abgeschnittener Download enthaelt den Marker gar nicht.
+    const uint8_t iend[8] = {0x49,0x45,0x4E,0x44,0xAE,0x42,0x60,0x82};
+    size_t  tailLen = (size < 64) ? size : 64;   // size >= 24 garantiert
+    uint8_t tail[64];
+    f.seek(size - tailLen);
+    if ((size_t)f.read(tail, tailLen) != tailLen) {
+        logError("IMG", "validatePng: Lesefehler Ende");
+        f.close(); return false;
+    }
+    f.close();
+    bool iendFound = false;
+    for (size_t i = 0; i + 8 <= tailLen; i++) {
+        bool match = true;
+        for (int j = 0; j < 8; j++) {
+            if (tail[i + j] != iend[j]) { match = false; break; }
+        }
+        if (match) { iendFound = true; break; }
+    }
+    if (!iendFound) {
+        logError("IMG", "validatePng: IEND fehlt — Bild unvollstaendig");
+        return false;
+    }
+
+    logInfo("IMG", "validatePng: OK — " + String(w) + "x" + String(h) +
+                   ", " + String(size) + " Bytes");
     return true;
 }
 

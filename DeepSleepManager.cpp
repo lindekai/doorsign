@@ -60,9 +60,13 @@ uint64_t DeepSleepManager::secondsUntilNextActiveWindow() const {
     // Ohne Zeitsync: normales Intervall schlafen
     time_t now = time(nullptr);
     if (now < 1704067200UL) {
-        logWarn("SLEEP", "Keine Zeitinfo — schlafe " +
-                         String(UPDATE_INTERVAL_SEC) + "s");
-        return (uint64_t)UPDATE_INTERVAL_SEC;
+        // Ohne gueltige Zeit koennen wir das Zeitfenster nicht bestimmen.
+        // Laengeres Blind-Intervall statt UPDATE_INTERVAL_SEC, damit ein
+        // anhaltender NTP-Ausfall (z.B. am Wochenende) den Akku nicht durch
+        // haeufiges Aufwachen leert.
+        logWarn("SLEEP", "Keine Zeitinfo — Blind-Backoff " +
+                         String(NTP_FAIL_SLEEP_SEC) + "s");
+        return (uint64_t)NTP_FAIL_SLEEP_SEC;
     }
 
     struct tm ti;
